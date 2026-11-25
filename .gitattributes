@@ -1,0 +1,4 @@
+# Depoda her zaman LF satır sonu (Vercel/Linux derlemesiyle tutarlı)
+* text=auto eol=lf
+*.png binary
+*.ico binary
