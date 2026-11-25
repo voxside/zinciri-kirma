@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { R, S, type Theme } from '@/constants/theme';
-import { sendLoginCode, signOut, verifyLoginCode } from '@/lib/supabase';
+import { signInWithPassword, signOut, signUpWithPassword } from '@/lib/supabase';
 import { syncNow, useSyncStatus } from '@/lib/sync';
 import { useStyles, useTheme } from '@/theme/theme-context';
 
@@ -17,8 +17,8 @@ export function AccountCard() {
       <View style={styles.card}>
         <Text style={styles.title}>Bulut senkronu kapalı</Text>
         <Text style={styles.text}>
-          Veriler şu an sadece bu cihazda. Açmak için proje klasöründeki .env dosyasına Supabase adresini ve
-          anahtarını ekleyip uygulamayı yeniden başlat.
+          Veriler şu an sadece bu cihazda. Bulut bağlantı bilgileri bu sürüme eklenmemiş (Vercel ortam değişkenleri
+          veya .env).
         </Text>
       </View>
     );
@@ -54,17 +54,31 @@ export function AccountCard() {
 function SignIn() {
   const t = useTheme();
   const styles = useStyles(makeStyles);
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
-  const [code, setCode] = useState('');
-  const [step, setStep] = useState<'email' | 'code'>('email');
+  const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
 
-  const run = async (fn: () => Promise<void>) => {
+  const canSubmit = email.includes('@') && password.length >= 6;
+
+  const submit = async () => {
     setBusy(true);
     setMsg(null);
+    setInfo(null);
     try {
-      await fn();
+      if (mode === 'signin') {
+        await signInWithPassword(email, password);
+      } else {
+        const { needsConfirmation } = await signUpWithPassword(email, password);
+        if (needsConfirmation) {
+          setInfo(
+            'Hesabın açıldı. E-postana gelen onay bağlantısına tıkla, sonra buraya dönüp aynı e-posta ve şifreyle giriş yap.',
+          );
+          setMode('signin');
+        }
+      }
     } catch (e) {
       setMsg(e instanceof Error ? e.message : String(e));
     } finally {
@@ -76,56 +90,54 @@ function SignIn() {
     <View style={styles.card}>
       <Text style={styles.title}>Buluta bağlan</Text>
       <Text style={styles.text}>
-        Hızlı yakalama (Apple Watch / Kestirmeler) ve cihazlar arası senkron için hesap gerekli. E-postana 6 haneli
-        bir kod gelecek.
+        Verilerin buluta yedeklenir ve aynı hesapla girdiğin her cihazda görünür. Telefondaki mevcut görevlerin ilk
+        girişte yüklenir.
       </Text>
-      {step === 'email' ? (
-        <>
-          <TextInput
-            value={email}
-            onChangeText={setEmail}
-            placeholder="E-posta"
-            placeholderTextColor={t.textFaint}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoComplete="email"
-            style={styles.input}
-          />
-          <Button
-            label="Kod gönder"
-            busy={busy}
-            disabled={!email.includes('@')}
-            onPress={() =>
-              run(async () => {
-                await sendLoginCode(email);
-                setStep('code');
-              })
-            }
-          />
-        </>
-      ) : (
-        <>
-          <TextInput
-            value={code}
-            onChangeText={setCode}
-            placeholder="6 haneli kod"
-            placeholderTextColor={t.textFaint}
-            keyboardType="number-pad"
-            autoComplete="one-time-code"
-            maxLength={8}
-            style={styles.input}
-          />
-          <View style={styles.row}>
-            <Button
-              label="Giriş yap"
-              busy={busy}
-              disabled={code.trim().length < 6}
-              onPress={() => run(() => verifyLoginCode(email, code))}
-            />
-            <Button label="Geri" ghost onPress={() => setStep('email')} />
-          </View>
-        </>
-      )}
+
+      <View style={styles.tabs}>
+        {(['signin', 'signup'] as const).map((m) => (
+          <Pressable
+            key={m}
+            onPress={() => {
+              setMode(m);
+              setMsg(null);
+            }}
+            style={[styles.tab, mode === m && { backgroundColor: t.primarySoft, borderColor: t.primary }]}>
+            <Text style={[styles.tabText, mode === m && { color: t.text }]}>
+              {m === 'signin' ? 'Giriş yap' : 'Hesap oluştur'}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      <TextInput
+        value={email}
+        onChangeText={setEmail}
+        placeholder="E-posta"
+        placeholderTextColor={t.textFaint}
+        keyboardType="email-address"
+        autoCapitalize="none"
+        autoComplete="email"
+        style={styles.input}
+      />
+      <TextInput
+        value={password}
+        onChangeText={setPassword}
+        placeholder={mode === 'signup' ? 'Şifre belirle (en az 6 karakter)' : 'Şifre'}
+        placeholderTextColor={t.textFaint}
+        secureTextEntry
+        autoCapitalize="none"
+        autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+        onSubmitEditing={() => canSubmit && void submit()}
+        style={styles.input}
+      />
+      <Button
+        label={mode === 'signin' ? 'Giriş yap' : 'Hesap oluştur'}
+        busy={busy}
+        disabled={!canSubmit}
+        onPress={() => void submit()}
+      />
+      {info ? <Text style={[styles.text, { color: t.primary }]}>{info}</Text> : null}
       {msg ? <Text style={styles.error}>{msg}</Text> : null}
     </View>
   );
@@ -164,6 +176,16 @@ const makeStyles = (t: Theme) =>
   StyleSheet.create({
   card: { padding: S.lg, borderRadius: R.lg, backgroundColor: t.surface, borderWidth: 1, borderColor: t.border, gap: S.md },
   row: { flexDirection: 'row', alignItems: 'center', gap: S.sm },
+  tabs: { flexDirection: 'row', gap: S.sm },
+  tab: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 9,
+    borderRadius: R.md,
+    borderWidth: 1,
+    borderColor: t.border,
+  },
+  tabText: { color: t.textDim, fontWeight: '700', fontSize: 14 },
   dot: { width: 8, height: 8, borderRadius: 4 },
   title: { color: t.text, fontSize: 16, fontWeight: '800' },
   text: { color: t.textDim, fontSize: 13, lineHeight: 18 },

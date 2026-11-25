@@ -29,8 +29,12 @@ npx eslint src          # lint
 ## Bulut senkronu (isteğe bağlı)
 
 1. supabase.com'da proje aç, `supabase/migrations/20261125000000_init.sql` dosyasını SQL Editor'de çalıştır.
-2. Authentication → Email Templates → Magic Link şablonuna `{{ .Token }}` ekle (e-postaya 6 haneli kod gelir).
+2. Authentication → URL Configuration → **Site URL**'yi yayın adresine (örn. `https://zinciri-kirma.vercel.app`) ayarla;
+   hesap onay e-postasındaki bağlantı oraya döner.
 3. `.env.example` dosyasını `.env` olarak kopyala, Supabase adresini ve publishable anahtarını yaz.
+
+Giriş e-posta + şifre ile yapılır (Hafıza sekmesi). Bağlantılı giriş bilerek kullanılmıyor: iPhone'da bağlantı
+Safari'de açılır ve Safari ile ana ekran uygulamasının verisi ayrıdır.
 
 `.env` git'e gönderilmez. Vercel'de aynı iki değişkeni **Project Settings → Environment Variables** altına ekle.
 
